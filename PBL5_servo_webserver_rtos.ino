@@ -2,24 +2,55 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <ESP32Servo.h>
+#include <Stepper.h>
+
 
 // const char* ssid = "Tro 123";
 // const char* password = "tudoanpasss*#";
 
-const char* ssid = "Zone Six Phu";
-const char* password = "19phamnhuxuong";
-const char* serverName = "https://af49-35-245-162-201.ngrok-free.app/predict";
+// const char* ssid = "Zone Six Phu";
+// const char* ssid = "Zone Six-19PNX-5G";
+// const char* password = "19phamnhuxuong";
 
-Servo servo1;
-Servo servo2;
+const char* ssid = "Realmi";
+const char* password = "20102002";
 
-const int ledPin = 2;
+const char* serverName = "https://019d-34-147-15-21.ngrok-free.app/predict";
+
+// Servo servo1;
+// Servo servo2;
+
+// const int ledPin = 2;
 // const int sv1Pin = 17;
-const int sv1Pin = 13;
-const int sv2Pin = 14;
-const int cb1Pin = 34;        
-// const int cb2Pin = 35;   
-const int cb3Pin = 32;        
+// const int sv1Pin = 13;
+// const int sv2Pin = 14;
+const int cb1Pin = 34;   //điều khiển servo      
+// const int cb2Pin = 35; 
+const int cb3Pin = 13;   // điều khiển lấy data
+
+const int steps_per_rev = 200; //Set to 200 for NIMA 17
+const int IN1_motor1 = 12;
+const int IN2_motor1 = 14;
+const int IN3_motor1 = 27;
+const int IN4_motor1 = 26;
+
+// const int IN1_motor2 = 25;
+// const int IN2_motor2 = 23;
+// const int IN3_motor2 = 32;
+// const int IN4_motor2 = 35;
+
+const int IN1_motor2 = 15;
+const int IN2_motor2 = 2;
+const int IN3_motor2 = 0;
+const int IN4_motor2 = 4;
+
+Stepper motor1(steps_per_rev, IN1_motor1, IN2_motor1, IN3_motor1, IN4_motor1);
+Stepper motor2(steps_per_rev, IN1_motor2, IN2_motor2, IN3_motor2, IN4_motor2);
+
+
+int redAppleCount = 0;
+int greenAppleCount = 0;
+
 
 long debouncing_time = 2000;
 volatile unsigned long last_micros1;
@@ -67,11 +98,12 @@ String getDetailFromJson(const String& jsonString);
 
 void setup() {
   Serial.begin(115200);
-  // pinMode(ledPin, OUTPUT);
-  // digitalWrite(ledPin, LOW);
-
-  servo1.attach(sv1Pin, 500, 2400);
-  servo2.attach(sv2Pin, 500, 2400);
+  //servo
+  // servo1.attach(sv1Pin, 500, 2400);
+  // servo2.attach(sv2Pin, 500, 2400);
+  //stepper
+  motor1.setSpeed(60);
+  motor2.setSpeed(60);
 
   pinMode(cb1Pin, INPUT_PULLUP);
   // pinMode(cb2Pin, INPUT_PULLUP);
@@ -98,7 +130,7 @@ void setup() {
   // xTaskCreatePinnedToCore(controlSemaphoreAndFetchData, "Control Semaphore And Fetch Data", 4096, NULL, 2, NULL, 1);
   xTaskCreatePinnedToCore(controlServo1, "Control Servo1", 2048, NULL, 3, NULL, 1);
   // xTaskCreatePinnedToCore(controlServo2, "Control Servo2", 2048, NULL, 3, NULL, 1);
-  // xTaskCreatePinnedToCore(readAndPrintValues, "Read Sensor", 2048, NULL, 1, NULL, 1);  
+  xTaskCreatePinnedToCore(readAndPrintValues, "Read value", 2048, NULL, 1, NULL, 1);  
 
 }
 
@@ -213,34 +245,38 @@ void controlServo1(void *parameter) {
             // Serial.println(serverData);  
             Serial.println("Bật servo 1");  // In ra câu "bật servo"
             // servo1.write(120);      // Quay servo2 đến góc 120 độ
+            motor1.step(steps_per_rev);
             
-            // delay(2000);
-            // for(int i = 0; i< 2000;i++){}
-            vTaskDelay(5000 / portTICK_PERIOD_MS);
+            delay(2000);
+            // vTaskDelay(5000 / portTICK_PERIOD_MS);
             
             Serial.println("Đóng servo 1");  // In ra câu "đóng servo"
-            // servo1.write(240);       // Trả về góc 0 độ
+            motor1.step(-steps_per_rev);
+
+            // servo1.write(0);       // Trả về góc 0 độ
+
+            redAppleCount++;  // Tăng số lượng táo đỏ
+            Serial.print("Số lượng táo đỏ: ");
+            Serial.println(redAppleCount);
         } else if (serverData == "GreenApple"){
             // Serial.println(serverData);  
             Serial.println("Bật servo 2");  // In ra câu "bật servo"
             // servo2.write(60);      // Quay servo2 đến góc 120 độ
-            // delay(2000);
-            // for(int i = 0; i< 2000;i++){}
-            vTaskDelay(5000 / portTICK_PERIOD_MS);
+            motor2.step(steps_per_rev);
+
+            // vTaskDelay(5000 / portTICK_PERIOD_MS);
+            delay(2000);
 
             Serial.println("Đóng servo 2");  // In ra câu "đóng servo"
+            motor2.step(-steps_per_rev);
             // servo2.write(0); 
+
+            greenAppleCount++;  // Tăng số lượng táo xanh
+            Serial.print("Số lượng táo xanh: ");
+            Serial.println(greenAppleCount);
         } else{
             Serial.println("Chưa dự đoán được");  
-            // servo1.write(90);      // Quay servo2 đến góc 120 độ
-            // Serial.println("Bật servo 1");  // In ra câu "bật servo"
-            // // Chờ 5 giây trước khi trả về vị trí ban đầu
-            // delay(5000); 
-
-            // Serial.println("Đóng servo 1");  // In ra câu "đóng servo"
-            // servo1.write(0);  
         }
-        // vTaskDelay(5000 / portTICK_PERIOD_MS);
       }
     }
   }
@@ -275,19 +311,19 @@ void readAndPrintValues(void *parameter) {
   while(true){
     Serial.println("task readAndPrintValues is runing");
     // Đọc giá trị từ các cảm biến
-    int sensorValue1 = digitalRead(cb1Pin);
+    // int sensorValue1 = digitalRead(cb1Pin);
     // int sensorValue2 = digitalRead(cb2Pin);
-    int sensorValue3 = digitalRead(cb3Pin);
+    // int sensorValue3 = digitalRead(cb3Pin);
 
     // Hiển thị trạng thái cảm biến hồng ngoại 1
-    Serial.print("Cảm biến 1: ");
-    if (sensorValue1 == 0) {
-      Serial.println("Phát hiện vật thể");
-      Serial.println("Giá trị:" + String(sensorValue1));
-    } else {
-      Serial.println("Không phát hiện vật thể");
-      Serial.println("Giá trị:" + String(sensorValue1));
-    }
+    // Serial.print("Cảm biến 1: ");
+    // if (sensorValue1 == 0) {
+    //   Serial.println("Phát hiện vật thể");
+    //   Serial.println("Giá trị:" + String(sensorValue1));
+    // } else {
+    //   Serial.println("Không phát hiện vật thể");
+    //   Serial.println("Giá trị:" + String(sensorValue1));
+    // }
     
     // Hiển thị trạng thái cảm biến hồng ngoại 2
     // Serial.print("Cảm biến 2: ");
@@ -299,18 +335,23 @@ void readAndPrintValues(void *parameter) {
     //   Serial.println("Giá trị:" + String(sensorValue2));
     // }
 
-    Serial.print("Cảm biến 3: ");
-    if (sensorValue3 == 0) {
-      Serial.println("Phát hiện vật thể");
-      Serial.println("Giá trị:" + String(sensorValue3));
-    } else {
-      Serial.println("Không phát hiện vật thể");
-      Serial.println("Giá trị:" + String(sensorValue3));
-    }
+    // Serial.print("Cảm biến 3: ");
+    // if (sensorValue3 == 0) {
+    //   Serial.println("Phát hiện vật thể");
+    //   Serial.println("Giá trị:" + String(sensorValue3));
+    // } else {
+    //   Serial.println("Không phát hiện vật thể");
+    //   Serial.println("Giá trị:" + String(sensorValue3));
+    // }
 
+    // In ra số lượng táo xanh và táo đỏ
+    Serial.print("Số lượng táo đỏ: ");
+    Serial.println(redAppleCount);
+    Serial.print("Số lượng táo xanh: ");
+    Serial.println(greenAppleCount);
     // fetchDataFromServer();
     Serial.println("----------------------");  // Dòng ngăn cách giữa các lần đọc
-    vTaskDelay(2000 / portTICK_PERIOD_MS);
+    vTaskDelay(3000 / portTICK_PERIOD_MS);
   }
 }
 
