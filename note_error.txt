@@ -1,0 +1,2 @@
+warning: in the working copy of 'PBL5_servo_webserver_rtos.ino', LF will be replaced by CRLF the next time Git touches it
+=>git config --global core.autocrlf true

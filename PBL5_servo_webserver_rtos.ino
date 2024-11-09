@@ -1,9 +1,15 @@
+#define BLYNK_TEMPLATE_ID "TMPL6jDuSVjPI"
+#define BLYNK_TEMPLATE_NAME "PBL5"
+#define BLYNK_AUTH_TOKEN "y1uPz6lIRsVM8OVFa0u6EC3UzsNnCQL6"
+#define RED_APPLE_PIN V1
+#define GREEN_APPLE_PIN V2
+
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <ESP32Servo.h>
 #include <Stepper.h>
-
+#include <BlynkSimpleEsp32.h>
 
 // const char* ssid = "Tro 123";
 // const char* password = "tudoanpasss*#";
@@ -15,7 +21,7 @@
 const char* ssid = "Realmi";
 const char* password = "20102002";
 
-const char* serverName = "https://019d-34-147-15-21.ngrok-free.app/predict";
+const char* serverName = "https://47ac-34-34-102-177.ngrok-free.app/predict";
 
 // Servo servo1;
 // Servo servo2;
@@ -91,13 +97,14 @@ void debounceInterrupt3(){
   }
 }
 
-void controlServo1(void *parameter);
-void readAndPrintValues(void *parameter);
+void taskControlStepper(void *parameter);
+void taskPrint(void *parameter);
 String getDetailFromJson(const String& jsonString);
 
 
 void setup() {
   Serial.begin(115200);
+  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, password);
   //servo
   // servo1.attach(sv1Pin, 500, 2400);
   // servo2.attach(sv2Pin, 500, 2400);
@@ -126,41 +133,21 @@ void setup() {
   // attachInterrupt(digitalPinToInterrupt(cb2Pin), cb2ISR, FALLING);
   attachInterrupt(digitalPinToInterrupt(cb3Pin), debounceInterrupt3, FALLING);
 
-  xTaskCreatePinnedToCore(fetchDataFromServer, "Fetch Server Data", 4096, NULL, 2, NULL, 1);
-  // xTaskCreatePinnedToCore(controlSemaphoreAndFetchData, "Control Semaphore And Fetch Data", 4096, NULL, 2, NULL, 1);
-  xTaskCreatePinnedToCore(controlServo1, "Control Servo1", 2048, NULL, 3, NULL, 1);
+  xTaskCreatePinnedToCore(taskFetchData, "Fetch Server Data", 4096, NULL, 3, NULL, 1);
+  xTaskCreatePinnedToCore(taskControlStepper, "Control Stepper", 2048, NULL, 4, NULL, 1);
   // xTaskCreatePinnedToCore(controlServo2, "Control Servo2", 2048, NULL, 3, NULL, 1);
-  xTaskCreatePinnedToCore(readAndPrintValues, "Read value", 2048, NULL, 1, NULL, 1);  
-
+  xTaskCreatePinnedToCore(taskPrint, "Print Value", 2048, NULL, 1, NULL, 1);  
+  xTaskCreatePinnedToCore(taskSentToBlynk, "sent to blynk", 4096, NULL, 2, NULL, 1); 
+  // xTaskCreatePinnedToCore(taskBlynkRun, "Blynk Run", 2048, NULL, 2, NULL, 0);
+ 
 }
 
 void loop() {
   // Không cần sử dụng trong FreeRTOS
+  Blynk.run();
 }
 
-// void fetchDataFromServer(void *parameter) {
-//   TickType_t xLastWakeTime = xTaskGetTickCount();  // Lưu thời điểm bắt đầu
-//   while (true) {
-//     Serial.println("task fetchDataFromServer is runing");
-//     HTTPClient http;
-//     http.begin(serverName);
-//     int httpResponseCode = http.GET();
-//     if (httpResponseCode > 0) {
-//       String payload = http.getString();
-//       Serial.println("Payload:"+payload);
-//       String data = getDetailFromJson(payload);
-//       Serial.println("data tra vê từ server:" + data);
-//       xQueueSend(serverQueue, &data, portMAX_DELAY);
-//       Serial.println("đã gửi vào hàng đợi");
-//     } else {
-//       Serial.println("Failed to fetch data from server");
-//     }
-//     http.end();
-//     vTaskDelayUntil(&xLastWakeTime, 5000 / portTICK_PERIOD_MS); 
-//   }
-// }
-
-void fetchDataFromServer(void *parameter) {
+void taskFetchData(void *parameter) {
   Serial.println("task fetchDataFromServer is running");
   TickType_t xLastWakeTime = xTaskGetTickCount();
   while (true) {
@@ -185,37 +172,6 @@ void fetchDataFromServer(void *parameter) {
   }
 }
 
-// void fetchDataFromServer() {
-//   HTTPClient http;
-//   http.begin(serverName);
-//   int httpResponseCode = http.GET();
-  
-//   if (httpResponseCode > 0) {
-//     String payload = http.getString();
-//     Serial.println("Payload: " + payload);
-//     String data = getDetailFromJson(payload);
-//     Serial.println("Data từ server: " + data);
-//     xQueueSend(serverQueue, &data, portMAX_DELAY);
-//     Serial.println("Đã gửi vào hàng đợi");
-//   } else {
-//     Serial.println("Lỗi khi lấy dữ liệu từ server");
-//   }
-//   http.end();
-// }
-
-// // task controlSemaphoreAndFetchData
-// void controlSemaphoreAndFetchData(void *parameter) {
-//   TickType_t xLastWakeTime = xTaskGetTickCount();
-  
-//   while (true) {
-//     Serial.println("Task controlSemaphoreAndFetchData is running");
-//     if (xSemaphoreTake(cb3Semaphore, portMAX_DELAY) == pdTRUE) {  // Chờ cb3Semaphore
-//       fetchDataFromServer();  // Gọi hàm fetchDataFromServer khi semaphore được cấp
-//     }
-//     vTaskDelayUntil(&xLastWakeTime, 5000 / portTICK_PERIOD_MS); 
-//   }
-// }
-
 
 String getDetailFromJson(const String& jsonString) {
   StaticJsonDocument<200> doc;
@@ -230,27 +186,22 @@ String getDetailFromJson(const String& jsonString) {
 }
 
 //task controlServo1
-void controlServo1(void *parameter) {
+void taskControlStepper(void *parameter) {
   String serverData;
   Serial.println("task controlServo1 is runing");
   while (true) {
     if (xSemaphoreTake(cb1Semaphore, portMAX_DELAY) == pdTRUE) { // Chờ đến khi cb1Semaphore được cấp
       if (xQueueReceive(serverQueue, &serverData, portMAX_DELAY) == pdTRUE) {
-        // if (serverData == "onservo1") {
-        //   servo1.write(90);      // Quay servo1 đến góc 90 độ
-        //   vTaskDelay(2000 / portTICK_PERIOD_MS);
-        //   servo1.write(0);       // Trả về góc 0 độ
-        // }
         if (serverData == "RedApple") { //servo1
             // Serial.println(serverData);  
-            Serial.println("Bật servo 1");  // In ra câu "bật servo"
+            Serial.println("Bật stepper 1");  // In ra câu "bật servo"
             // servo1.write(120);      // Quay servo2 đến góc 120 độ
             motor1.step(steps_per_rev);
             
             delay(2000);
             // vTaskDelay(5000 / portTICK_PERIOD_MS);
             
-            Serial.println("Đóng servo 1");  // In ra câu "đóng servo"
+            Serial.println("Đóng stepper 1");  // In ra câu "đóng servo"
             motor1.step(-steps_per_rev);
 
             // servo1.write(0);       // Trả về góc 0 độ
@@ -260,14 +211,14 @@ void controlServo1(void *parameter) {
             Serial.println(redAppleCount);
         } else if (serverData == "GreenApple"){
             // Serial.println(serverData);  
-            Serial.println("Bật servo 2");  // In ra câu "bật servo"
+            Serial.println("Bật stepper 2");  // In ra câu "bật servo"
             // servo2.write(60);      // Quay servo2 đến góc 120 độ
             motor2.step(steps_per_rev);
 
             // vTaskDelay(5000 / portTICK_PERIOD_MS);
             delay(2000);
 
-            Serial.println("Đóng servo 2");  // In ra câu "đóng servo"
+            Serial.println("Đóng stepper 2");  // In ra câu "đóng servo"
             motor2.step(-steps_per_rev);
             // servo2.write(0); 
 
@@ -307,51 +258,41 @@ void controlServo1(void *parameter) {
 
 // Hàm đọc giá trị từ cảm biến và hiển thị ra Serial Monitor
 //task readAndPrintValues
-void readAndPrintValues(void *parameter) {
+void taskPrint(void *parameter) {
   while(true){
     Serial.println("task readAndPrintValues is runing");
-    // Đọc giá trị từ các cảm biến
-    // int sensorValue1 = digitalRead(cb1Pin);
-    // int sensorValue2 = digitalRead(cb2Pin);
-    // int sensorValue3 = digitalRead(cb3Pin);
-
-    // Hiển thị trạng thái cảm biến hồng ngoại 1
-    // Serial.print("Cảm biến 1: ");
-    // if (sensorValue1 == 0) {
-    //   Serial.println("Phát hiện vật thể");
-    //   Serial.println("Giá trị:" + String(sensorValue1));
-    // } else {
-    //   Serial.println("Không phát hiện vật thể");
-    //   Serial.println("Giá trị:" + String(sensorValue1));
-    // }
-    
-    // Hiển thị trạng thái cảm biến hồng ngoại 2
-    // Serial.print("Cảm biến 2: ");
-    // if (sensorValue2 == 0) {
-    //   Serial.println("Phát hiện vật thể");
-    //   Serial.println("Giá trị:" + String(sensorValue2));
-    // } else {
-    //   Serial.println("Không phát hiện vật thể");
-    //   Serial.println("Giá trị:" + String(sensorValue2));
-    // }
-
-    // Serial.print("Cảm biến 3: ");
-    // if (sensorValue3 == 0) {
-    //   Serial.println("Phát hiện vật thể");
-    //   Serial.println("Giá trị:" + String(sensorValue3));
-    // } else {
-    //   Serial.println("Không phát hiện vật thể");
-    //   Serial.println("Giá trị:" + String(sensorValue3));
-    // }
 
     // In ra số lượng táo xanh và táo đỏ
     Serial.print("Số lượng táo đỏ: ");
     Serial.println(redAppleCount);
+
     Serial.print("Số lượng táo xanh: ");
     Serial.println(greenAppleCount);
-    // fetchDataFromServer();
+
     Serial.println("----------------------");  // Dòng ngăn cách giữa các lần đọc
     vTaskDelay(3000 / portTICK_PERIOD_MS);
+  }
+}
+
+// void taskBlynkRun(void *parameter) {
+//   while (true) {
+//     Blynk.run();
+//     vTaskDelay(10 / portTICK_PERIOD_MS);
+//   }
+// }
+
+
+void taskSentToBlynk(void *parameter) {
+  while (true) {
+    if (Blynk.connected()) {
+      Serial.println("Gửi dữ liệu");
+      Blynk.virtualWrite(RED_APPLE_PIN, redAppleCount);
+      Blynk.virtualWrite(GREEN_APPLE_PIN, greenAppleCount);
+      Serial.println("Đã gửi lên Blynk");
+    } else {
+      Serial.println("Blynk không kết nối");
+    }
+    vTaskDelay(3000 / portTICK_PERIOD_MS);  // Đợi 3 giây
   }
 }
 
