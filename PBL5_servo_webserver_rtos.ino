@@ -3,6 +3,9 @@
 #define BLYNK_AUTH_TOKEN "y1uPz6lIRsVM8OVFa0u6EC3UzsNnCQL6"
 #define RED_APPLE_PIN V1
 #define GREEN_APPLE_PIN V2
+#define STEPPER_1_PIN V5
+#define STEPPER_2_PIN V4
+
 
 #include <WiFi.h>
 #include <HTTPClient.h>
@@ -21,7 +24,7 @@
 const char* ssid = "Realmi";
 const char* password = "20102002";
 
-const char* serverName = "https://47ac-34-34-102-177.ngrok-free.app/predict";
+const char* serverName = "https://c014-34-138-212-26.ngrok-free.app/predict";
 
 // Servo servo1;
 // Servo servo2;
@@ -35,6 +38,7 @@ const int cb1Pin = 34;   //điều khiển servo
 const int cb3Pin = 13;   // điều khiển lấy data
 
 const int steps_per_rev = 200; //Set to 200 for NIMA 17
+const int rotate_Angel = 60;
 const int IN1_motor1 = 12;
 const int IN2_motor1 = 14;
 const int IN3_motor1 = 27;
@@ -49,6 +53,9 @@ const int IN1_motor2 = 15;
 const int IN2_motor2 = 2;
 const int IN3_motor2 = 0;
 const int IN4_motor2 = 4;
+
+bool stepper1_On = false;  // Track motor states
+bool stepper2_On = false;
 
 Stepper motor1(steps_per_rev, IN1_motor1, IN2_motor1, IN3_motor1, IN4_motor1);
 Stepper motor2(steps_per_rev, IN1_motor2, IN2_motor2, IN3_motor2, IN4_motor2);
@@ -102,6 +109,7 @@ void taskPrint(void *parameter);
 String getDetailFromJson(const String& jsonString);
 
 
+
 void setup() {
   Serial.begin(115200);
   Blynk.begin(BLYNK_AUTH_TOKEN, ssid, password);
@@ -126,7 +134,7 @@ void setup() {
   cb1Semaphore = xSemaphoreCreateBinary();
   // cb2Semaphore = xSemaphoreCreateBinary();
   cb3Semaphore = xSemaphoreCreateBinary();
-  serverQueue = xQueueCreate(5, sizeof(String));
+  serverQueue = xQueueCreate(1, sizeof(String));
 
   // Thiết lập ngắt cho cảm biến hồng ngoại
   attachInterrupt(digitalPinToInterrupt(cb1Pin), debounceInterrupt1, FALLING);
@@ -185,49 +193,50 @@ String getDetailFromJson(const String& jsonString) {
   // return doc["detail"].as<String>();
 }
 
-//task controlServo1
+//task ControlStepper
 void taskControlStepper(void *parameter) {
   String serverData;
-  Serial.println("task controlServo1 is runing");
+  Serial.println("task ControlStepper is runing");
   while (true) {
     if (xSemaphoreTake(cb1Semaphore, portMAX_DELAY) == pdTRUE) { // Chờ đến khi cb1Semaphore được cấp
       if (xQueueReceive(serverQueue, &serverData, portMAX_DELAY) == pdTRUE) {
         if (serverData == "RedApple") { //servo1
-            // Serial.println(serverData);  
             Serial.println("Bật stepper 1");  // In ra câu "bật servo"
-            // servo1.write(120);      // Quay servo2 đến góc 120 độ
-            motor1.step(steps_per_rev);
+            // motor1.step(steps_per_rev);
+            rotateStepper(motor1, rotate_Angel);
             
             delay(2000);
             // vTaskDelay(5000 / portTICK_PERIOD_MS);
             
             Serial.println("Đóng stepper 1");  // In ra câu "đóng servo"
-            motor1.step(-steps_per_rev);
+            // motor1.step(-steps_per_rev);
+            rotateStepper(motor1, -rotate_Angel);
 
-            // servo1.write(0);       // Trả về góc 0 độ
 
             redAppleCount++;  // Tăng số lượng táo đỏ
             Serial.print("Số lượng táo đỏ: ");
             Serial.println(redAppleCount);
         } else if (serverData == "GreenApple"){
-            // Serial.println(serverData);  
             Serial.println("Bật stepper 2");  // In ra câu "bật servo"
-            // servo2.write(60);      // Quay servo2 đến góc 120 độ
-            motor2.step(steps_per_rev);
+            // motor2.step(steps_per_rev);
+            rotateStepper(motor2, rotate_Angel);
 
             // vTaskDelay(5000 / portTICK_PERIOD_MS);
             delay(2000);
 
             Serial.println("Đóng stepper 2");  // In ra câu "đóng servo"
-            motor2.step(-steps_per_rev);
-            // servo2.write(0); 
+            // motor2.step(-steps_per_rev);
+            rotateStepper(motor2, -rotate_Angel);
 
             greenAppleCount++;  // Tăng số lượng táo xanh
             Serial.print("Số lượng táo xanh: ");
             Serial.println(greenAppleCount);
         } else{
             Serial.println("Chưa dự đoán được");  
+          }
         }
+      else {
+        Serial.println("queue đang rỗng!");  
       }
     }
   }
@@ -284,6 +293,7 @@ void taskPrint(void *parameter) {
 
 void taskSentToBlynk(void *parameter) {
   while (true) {
+    Serial.println("task taskSentToBlynk is runing");
     if (Blynk.connected()) {
       Serial.println("Gửi dữ liệu");
       Blynk.virtualWrite(RED_APPLE_PIN, redAppleCount);
@@ -294,5 +304,63 @@ void taskSentToBlynk(void *parameter) {
     }
     vTaskDelay(3000 / portTICK_PERIOD_MS);  // Đợi 3 giây
   }
+}
+
+
+// BLYNK_WRITE(STEPPER_1_PIN) {
+//   int state = param.asInt();  // Get the value from Blynk (0 or 1)
+//   if (state == 1) {
+//     stepper1_On = true;
+//     motor1.step(steps_per_rev);  // Run motor1 forward (example)
+//     Serial.println("Stepper 1 ON");
+//   } else {
+//     stepper1_On = false;
+//     motor1.step(-steps_per_rev);  // Run motor1 backward to stop
+//     Serial.println("Stepper 1 OFF");
+//   }
+// }
+
+// BLYNK_WRITE(STEPPER_2_PIN) {
+//   int state = param.asInt();  // Get the value from Blynk (0 or 1)
+//   if (state == 1) {
+//     stepper2_On = true;
+//     motor1.step(steps_per_rev);  // Run motor1 forward (example)
+//     Serial.println("Stepper 2 ON");
+//   } else {
+//     stepper2_On = false;
+//     motor1.step(-steps_per_rev);  // Run motor1 backward to stop
+//     Serial.println("Stepper 2 OFF");
+//   }
+// }
+
+void rotateStepper(Stepper &motor, int angle) {
+  int steps = angle * steps_per_rev / 360;  // Tính số bước cho góc mong muốn
+  motor.step(steps);
+}
+
+void controlStepperWithBlynk(Stepper &motor, bool &motorState, int state, const char* motorName) {
+  if (state == 1) {
+    motorState = true;
+    rotateStepper(motor, rotate_Angel);
+    Serial.print(motorName);
+    Serial.println(" ON");
+  } else {
+    motorState = false;
+    rotateStepper(motor, -rotate_Angel);
+    Serial.print(motorName);
+    Serial.println(" OFF");
+  }
+}
+
+BLYNK_WRITE(STEPPER_1_PIN) {
+  int state = param.asInt();
+  controlStepperWithBlynk(motor1, stepper1_On, state, "Stepper 1");
+  redAppleCount++;
+}
+
+BLYNK_WRITE(STEPPER_2_PIN) {
+  int state = param.asInt();
+  controlStepperWithBlynk(motor2, stepper2_On, state, "Stepper 2");
+  greenAppleCount++;
 }
 
