@@ -24,7 +24,11 @@
 const char* ssid = "Realmi";
 const char* password = "20102002";
 
-const char* serverName = "https://c014-34-138-212-26.ngrok-free.app/predict";
+// const char* ssid = "n/w-b";
+// const char* password = "244466666";
+
+
+const char* serverName = "https://bca4-35-199-0-177.ngrok-free.app/predict";
 
 // Servo servo1;
 // Servo servo2;
@@ -134,15 +138,15 @@ void setup() {
   cb1Semaphore = xSemaphoreCreateBinary();
   // cb2Semaphore = xSemaphoreCreateBinary();
   cb3Semaphore = xSemaphoreCreateBinary();
-  serverQueue = xQueueCreate(1, sizeof(String));
+  serverQueue = xQueueCreate(5, sizeof(String));
 
   // Thiết lập ngắt cho cảm biến hồng ngoại
   attachInterrupt(digitalPinToInterrupt(cb1Pin), debounceInterrupt1, FALLING);
   // attachInterrupt(digitalPinToInterrupt(cb2Pin), cb2ISR, FALLING);
   attachInterrupt(digitalPinToInterrupt(cb3Pin), debounceInterrupt3, FALLING);
 
-  xTaskCreatePinnedToCore(taskFetchData, "Fetch Server Data", 4096, NULL, 3, NULL, 1);
-  xTaskCreatePinnedToCore(taskControlStepper, "Control Stepper", 2048, NULL, 4, NULL, 1);
+  xTaskCreatePinnedToCore(taskFetchData, "Fetch Server Data", 4096, NULL, 4, NULL, 1);
+  xTaskCreatePinnedToCore(taskControlStepper, "Control Stepper", 2048, NULL, 3, NULL, 1);
   // xTaskCreatePinnedToCore(controlServo2, "Control Servo2", 2048, NULL, 3, NULL, 1);
   xTaskCreatePinnedToCore(taskPrint, "Print Value", 2048, NULL, 1, NULL, 1);  
   xTaskCreatePinnedToCore(taskSentToBlynk, "sent to blynk", 4096, NULL, 2, NULL, 1); 
@@ -201,8 +205,10 @@ void taskControlStepper(void *parameter) {
     if (xSemaphoreTake(cb1Semaphore, portMAX_DELAY) == pdTRUE) { // Chờ đến khi cb1Semaphore được cấp
       if (xQueueReceive(serverQueue, &serverData, portMAX_DELAY) == pdTRUE) {
         if (serverData == "RedApple") { //servo1
-            Serial.println("Bật stepper 1");  // In ra câu "bật servo"
             // motor1.step(steps_per_rev);
+            delay(3000);
+            Serial.println("Bật stepper 1");  // In ra câu "bật servo"
+
             rotateStepper(motor1, rotate_Angel);
             
             delay(2000);
@@ -217,8 +223,10 @@ void taskControlStepper(void *parameter) {
             Serial.print("Số lượng táo đỏ: ");
             Serial.println(redAppleCount);
         } else if (serverData == "GreenApple"){
-            Serial.println("Bật stepper 2");  // In ra câu "bật servo"
             // motor2.step(steps_per_rev);
+            delay(6500);
+            Serial.println("Bật stepper 2");  // In ra câu "bật servo"
+
             rotateStepper(motor2, rotate_Angel);
 
             // vTaskDelay(5000 / portTICK_PERIOD_MS);
@@ -355,12 +363,12 @@ void controlStepperWithBlynk(Stepper &motor, bool &motorState, int state, const 
 BLYNK_WRITE(STEPPER_1_PIN) {
   int state = param.asInt();
   controlStepperWithBlynk(motor1, stepper1_On, state, "Stepper 1");
-  redAppleCount++;
+  // redAppleCount++;
 }
 
 BLYNK_WRITE(STEPPER_2_PIN) {
   int state = param.asInt();
   controlStepperWithBlynk(motor2, stepper2_On, state, "Stepper 2");
-  greenAppleCount++;
+  // greenAppleCount++;
 }
 
